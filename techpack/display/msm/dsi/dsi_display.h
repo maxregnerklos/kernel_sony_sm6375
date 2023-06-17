@@ -803,6 +803,12 @@ int dsi_display_dump_clks_state(struct dsi_display *display);
  */
 void dsi_display_dfps_update_parent(struct dsi_display *display);
 
+int dsi_panel_tx_cmd(struct dsi_panel *panel, struct dsi_cmd_desc *cmds);
+int dsi_panel_rx_cmd(struct dsi_display *display, struct dsi_cmd_desc *cmds,
+                      struct dsi_display_ctrl *ctrl, char *rbuf, int len);
+int dsi_display_cmd_engine_enable(struct dsi_display *display);
+int dsi_display_cmd_engine_disable(struct dsi_display *display);
+
 /**
  * dsi_display_unset_clk_src() - reset the clocks source to default
  * @display:         Handle to display
