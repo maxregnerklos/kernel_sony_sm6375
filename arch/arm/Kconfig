@@ -1911,7 +1911,6 @@ config CMDLINE
 choice
 	prompt "Kernel command line type" if CMDLINE != ""
 	default CMDLINE_FROM_BOOTLOADER
-	depends on ATAGS
 
 config CMDLINE_FROM_BOOTLOADER
 	bool "Use bootloader kernel arguments if available"
@@ -2167,3 +2166,4 @@ source "arch/arm/crypto/Kconfig"
 endif
 
 source "arch/arm/kvm/Kconfig"
+source "arch/arm/Kconfig.assembler"

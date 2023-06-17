@@ -656,7 +656,7 @@ struct fastrpc_file {
 	/* Flag to indicate ram dump collection status*/
 	bool is_ramdump_pend;
 	/* Flag to indicate dynamic process creation status*/
-	bool in_process_create;
+	enum fastrpc_process_create_state dsp_process_state;
 };
 
 static struct fastrpc_apps gfa;
@@ -2955,11 +2955,13 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 			       uint32_t kernel, uint32_t handle)
 {
 	struct smq_msg *msg = &ctx->msg;
+	struct smq_msg msg_temp;
 	struct fastrpc_file *fl = ctx->fl;
 	struct fastrpc_channel_ctx *channel_ctx = NULL;
 	int err = 0, cid = -1;
 	uint32_t sc = ctx->sc;
 	int64_t ns = 0;
+	int isasync = (ctx->asyncjob.isasyncjob ? true : false);
 
 	if (!fl) {
 		err = -EBADF;
@@ -3000,6 +3002,17 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 		mutex_unlock(&channel_ctx->rpmsg_mutex);
 		goto bail;
 	}
+
+	if (isasync) {
+		/*
+		 * After message is sent to DSP, async response thread could immediately
+		 * get the response and free context, which will result in a use-after-free
+		 * in this function. So use a local variable for message.
+		 */
+		memcpy(&msg_temp, msg, sizeof(struct smq_msg));
+		msg = &msg_temp;
+	}
+
 	err = rpmsg_send(channel_ctx->rpdev->ept, (void *)msg, sizeof(*msg));
 	mutex_unlock(&channel_ctx->rpmsg_mutex);
 	trace_fastrpc_rpmsg_send(cid, (uint64_t)ctx, msg->invoke.header.ctx,
@@ -3742,13 +3755,13 @@ static int fastrpc_init_create_dynamic_process(struct fastrpc_file *fl,
 	} inbuf;
 
 	spin_lock(&fl->hlock);
-	if (fl->in_process_create) {
+	if (fl->dsp_process_state) {
 		err = -EALREADY;
 		ADSPRPC_ERR("Already in create dynamic process\n");
 		spin_unlock(&fl->hlock);
 		return err;
 	}
-	fl->in_process_create = true;
+	fl->dsp_process_state = PROCESS_CREATE_IS_INPROGRESS;
 	spin_unlock(&fl->hlock);
 	inbuf.pgid = fl->tgid;
 	inbuf.namelen = strlen(current->comm) + 1;
@@ -3903,9 +3916,11 @@ bail:
 		fastrpc_mmap_free(file, 0);
 		mutex_unlock(&fl->map_mutex);
 	}
-	if (err) {
+
 		spin_lock(&fl->hlock);
 		locked = 1;
+	if (err) {
+		fl->dsp_process_state = PROCESS_CREATE_DEFAULT;
 		if (!IS_ERR_OR_NULL(fl->init_mem)) {
 			init_mem = fl->init_mem;
 			fl->init_mem = NULL;
@@ -3913,14 +3928,13 @@ bail:
 			locked = 0;
 			fastrpc_buf_free(init_mem, 0);
 		}
+	} else {
+		fl->dsp_process_state = PROCESS_CREATE_SUCCESS;
+	}
 		if (locked) {
 			spin_unlock(&fl->hlock);
 			locked = 0;
-		}
 	}
-	spin_lock(&fl->hlock);
-	fl->in_process_create = false;
-	spin_unlock(&fl->hlock);
 	return err;
 }
 
@@ -3986,6 +4000,11 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 		err = fastrpc_mmap_remove_pdr(fl);
 		if (err)
 			goto bail;
+	} else {
+		ADSPRPC_ERR(
+			"Create static process is failed for proc_name %s",
+			proc_name);
+		goto bail;
 	}
 
 	if (!me->staticpd_flags && !me->legacy_remote_heap) {
@@ -4009,7 +4028,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 		 * If remote-heap VMIDs are defined in DTSI, then do
 		 * hyp_assign from HLOS to those VMs (LPASS, ADSP).
 		 */
-		if (rhvm->vmid && mem && !mem->is_persistent) {
+		if (rhvm->vmid && mem && !mem->is_persistent && mem->refs == 1 && size) {
 			err = hyp_assign_phys(phys, (uint64_t)size,
 				hlosvm, 1,
 				rhvm->vmid, rhvm->vmperm, rhvm->vmcount);
@@ -4503,7 +4522,7 @@ bail:
 
 static int fastrpc_mmap_on_dsp(struct fastrpc_file *fl, uint32_t flags,
 					uintptr_t va, uint64_t phys,
-					size_t size, uintptr_t *raddr)
+					size_t size, int refs, uintptr_t *raddr)
 {
 	struct fastrpc_ioctl_invoke_async ioctl;
 	struct fastrpc_apps *me = &gfa;
@@ -4568,7 +4587,7 @@ static int fastrpc_mmap_on_dsp(struct fastrpc_file *fl, uint32_t flags,
 		}
 	}
 	if (flags == ADSP_MMAP_REMOTE_HEAP_ADDR
-				&& me->channel[cid].rhvm.vmid) {
+				&& me->channel[cid].rhvm.vmid && refs == 1) {
 		err = hyp_assign_phys(phys, (uint64_t)size,
 				hlosvm, 1, me->channel[cid].rhvm.vmid,
 				me->channel[cid].rhvm.vmperm,
@@ -5053,7 +5072,7 @@ static int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		if (err)
 			goto bail;
 		err = fastrpc_mmap_on_dsp(fl, ud->flags, 0,
-				rbuf->phys, rbuf->size, &raddr);
+				rbuf->phys, rbuf->size, 0, &raddr);
 		if (err)
 			goto bail;
 		rbuf->raddr = raddr;
@@ -5074,7 +5093,7 @@ static int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		else
 			va_to_dsp = (uintptr_t)map->va;
 		VERIFY(err, 0 == (err = fastrpc_mmap_on_dsp(fl, ud->flags,
-			va_to_dsp, map->phys, map->size, &raddr)));
+			va_to_dsp, map->phys, map->size, map->refs, &raddr)));
 		if (err)
 			goto bail;
 		map->raddr = raddr;
@@ -5337,7 +5356,7 @@ skip_dump_wait:
 	spin_lock(&fl->apps->hlock);
 	hlist_del_init(&fl->hn);
 	fl->is_ramdump_pend = false;
-	fl->in_process_create = false;
+	fl->dsp_process_state = PROCESS_CREATE_DEFAULT;
 	spin_unlock(&fl->apps->hlock);
 	kfree(fl->debug_buf);
 	kfree(fl->gidlist.gids);
@@ -5755,7 +5774,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->qos_request = 0;
 	fl->dsp_proc_init = 0;
 	fl->is_ramdump_pend = false;
-	fl->in_process_create = false;
+	fl->dsp_process_state = PROCESS_CREATE_DEFAULT;
 	init_completion(&fl->work);
 	fl->file_close = FASTRPC_PROCESS_DEFAULT_STATE;
 	filp->private_data = fl;

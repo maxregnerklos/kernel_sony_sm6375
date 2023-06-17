@@ -15,6 +15,8 @@ struct sk_buff;
 #define MAX_NON_WAKE_SVC_LEN    5
 /*PDX225T code for JIMODM18-39912 by qiantao at 2022/09/13 end*/
 
+#define MAX_NON_WAKE_SVC_LEN    5
+
 /**
  * struct qrtr_endpoint - endpoint handle
  * @xmit: Callback for outgoing packets
