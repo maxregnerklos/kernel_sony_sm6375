@@ -322,8 +322,12 @@ int snd_soc_put_volsw(struct snd_kcontrol *kcontrol,
 		mask = BIT(sign_bit + 1) - 1;
 
 	val = ucontrol->value.integer.value[0];
-	if (mc->platform_max && ((int)val + min) > mc->platform_max)
+/*PDX225T code to resolve baseline conflicts by zhouchenghua at 2022/8/5 start*/
+ /*PDX225T code for SU6391A-11 by zhouchenghua at 2022/7/8 start*/
+	if (mc->platform_max &&((int)val + min) > mc->platform_max)
 		return -EINVAL;
+ /*PDX225T code for SU6391A-11 by zhouchenghua at 2022/7/8 end*/
+/*PDX225T code to resolve baseline conflicts by zhouchenghua at 2022/8/5 end*/
 	if (val > max - min)
 		return -EINVAL;
 	if (val < 0)
@@ -335,8 +339,13 @@ int snd_soc_put_volsw(struct snd_kcontrol *kcontrol,
 	val = val << shift;
 	if (snd_soc_volsw_is_stereo(mc)) {
 		val2 = ucontrol->value.integer.value[1];
+
+/*PDX225T code to resolve baseline conflicts by zhouchenghua at 2022/8/5 start*/
+ /*PDX225T code for SU6391A-11 by zhouchenghua at 2022/7/8 start*/
 		if (mc->platform_max && ((int)val2 + min) > mc->platform_max)
 			return -EINVAL;
+ /*PDX225T code for SU6391A-11 by zhouchenghua at 2022/7/8 end*/
+/*PDX225T code to resolve baseline conflicts by zhouchenghua at 2022/8/5 end*/
 		if (val2 > max - min)
 			return -EINVAL;
 		if (val2 < 0)
