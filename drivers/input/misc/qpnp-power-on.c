@@ -716,7 +716,7 @@ static int qpnp_resin_pon_reset_config(struct qpnp_pon *pon,
 }
 
 #define SHIPMODE_NAME "/sys/class/power_supply/battery/set_ship_mode"
-int qn5965_set_ship_mode()
+int qn5965_set_ship_mode(void)
 {
 	struct file *pfile = NULL;
 	loff_t pos;

@@ -1,0 +1,1 @@
+../../../drivers/power/supply/sm5038_pmic-voter.c
