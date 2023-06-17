@@ -14,7 +14,7 @@
 #include "cam_res_mgr_api.h"
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
-
+#include "../cam_ois_dw9781/dw9781_ois.h"
 int32_t cam_ois_construct_default_power_setting(
 	struct cam_sensor_power_ctrl_t *power_info)
 {
@@ -217,6 +217,7 @@ static int cam_ois_update_time(struct i2c_settings_array *i2c_set)
 	uint32_t size = 0;
 	uint32_t i = 0;
 	uint64_t qtime_ns = 0;
+	uint64_t qtime_ms = 0;
 
 	if (i2c_set == NULL) {
 		CAM_ERR(CAM_OIS, "Invalid Args");
@@ -236,17 +237,25 @@ static int cam_ois_update_time(struct i2c_settings_array *i2c_set)
 		if (i2c_list->op_code ==  CAM_SENSOR_I2C_WRITE_SEQ) {
 			size = i2c_list->i2c_settings.size;
 			/* qtimer is 8 bytes so validate here*/
-			if (size < 8) {
+			/* for ois dw9781,Qtime reg is 0x70db, qtime reg count is 1, reg datatype is 2 bytes*/
+			if (size < 1) {
 				CAM_ERR(CAM_OIS, "Invalid write time settings");
 				return -EINVAL;
 			}
-			for (i = 0; i < size; i++) {
-				CAM_DBG(CAM_OIS, "time: reg_data[%d]: 0x%x",
+            /* dw9781 qtime unit 0.1ms*/
+            qtime_ms = qtime_ns/100000;
+			i2c_list->i2c_settings.reg_setting[i].reg_data = (qtime_ms) & 0xFFFF;
+			for (i = 0; i < 8; i++) {
+				CAM_DBG(CAM_OIS, "time-ns: reg_data[%d]: 0x%x",
 					i, (qtime_ns & 0xFF));
-				i2c_list->i2c_settings.reg_setting[i].reg_data =
-					(qtime_ns & 0xFF);
 				qtime_ns >>= 8;
 			}
+			for (i = 0; i < 8; i++) {
+				CAM_DBG(CAM_OIS, "time-ms: reg_data[%d]: 0x%x",
+					i, (qtime_ms & 0xFF));
+				qtime_ms >>= 8;
+			}
+
 		}
 	}
 
@@ -648,7 +657,15 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			}
 		}
 
-		rc = cam_ois_apply_settings(o_ctrl, &o_ctrl->i2c_init_data);
+        rc = dw9781_download_ois_fw(o_ctrl);
+        /* we need avoid ois driver return positive , this is a ioctl control*/
+        if(rc < 0){
+            CAM_ERR(CAM_OIS,
+                    "Fail to download dw9781 ois fw, rc is %d", rc);
+            goto pwr_dwn;
+        }
+
+		/*rc = cam_ois_apply_settings(o_ctrl, &o_ctrl->i2c_init_data);
 		if ((rc == -EAGAIN) &&
 			(o_ctrl->io_master_info.master_type == CCI_MASTER)) {
 			CAM_WARN(CAM_OIS,
@@ -662,14 +679,19 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				"Cannot apply Init settings: rc = %d",
 				rc);
 			goto pwr_dwn;
-		}
+		}*/
 
 		if (o_ctrl->is_ois_calib) {
-			rc = cam_ois_apply_settings(o_ctrl,
+			/*rc = cam_ois_apply_settings(o_ctrl,
 				&o_ctrl->i2c_calib_data);
 			if (rc) {
 				CAM_ERR(CAM_OIS, "Cannot apply calib data");
 				goto pwr_dwn;
+			}*/
+			rc = gyro_offset_calibrtion(o_ctrl);
+			if(rc < 0){
+				CAM_ERR(CAM_OIS,
+					"Fail to calibration");
 			}
 		}
 
@@ -973,6 +995,7 @@ int cam_ois_driver_cmd(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		}
 
 		if (o_ctrl->cam_ois_state == CAM_OIS_CONFIG) {
+			dw9781_exit();
 			rc = cam_ois_power_down(o_ctrl);
 			if (rc < 0) {
 				CAM_ERR(CAM_OIS, "OIS Power down failed");

@@ -170,7 +170,10 @@ camera-$(CONFIG_SPECTRA_SENSOR) += \
 	cam_sensor_module/cam_sensor_io/cam_sensor_qup_i2c.o \
 	cam_sensor_module/cam_sensor_io/cam_sensor_spi.o \
 	cam_sensor_module/cam_sensor_utils/cam_sensor_util.o \
-	cam_sensor_module/cam_res_mgr/cam_res_mgr.o
+	cam_sensor_module/cam_res_mgr/cam_res_mgr.o \
+	cam_sensor_module/cam_sensor_extldo_wl2868c/wl2868c.o \
+	cam_sensor_module/cam_flash_pm6125_gpio/pm6125_flash_gpio.o \
+	cam_sensor_module/cam_ois_dw9781/dw9781_ois.o
 
 camera-$(CONFIG_LEDS_QPNP_FLASH_V2) += \
 	cam_sensor_module/cam_flash/cam_flash_dev.o \

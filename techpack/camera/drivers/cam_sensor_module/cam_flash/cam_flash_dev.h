@@ -153,6 +153,9 @@ struct cam_flash_private_soc {
 	uint32_t     torch_max_current[CAM_FLASH_MAX_LED_TRIGGERS];
 	bool         is_wled_flash;
 	uint32_t     flash_type;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+    uint32_t     flash_gpio_enable;
+#endif
 };
 
 struct cam_flash_func_tbl {
@@ -185,6 +188,7 @@ struct cam_flash_func_tbl {
  *	                      (e.g. i2c/pmic/gpio)
  * @flash_trigger       : Flash trigger ptr
  * @torch_trigger       : Torch trigger ptr
+ * @pcb_type            : hardware board type, before v4 set 0, otherwise set 1
  * @cci_i2c_master      : I2C structure
  * @cci_device_num      : cci parent cell index
  * @io_master_info      : Information about the communication master
@@ -214,6 +218,7 @@ struct cam_flash_ctrl {
 	struct cam_flash_func_tbl           func_tbl;
 	struct led_trigger           *flash_trigger[CAM_FLASH_MAX_LED_TRIGGERS];
 	struct led_trigger           *torch_trigger[CAM_FLASH_MAX_LED_TRIGGERS];
+    int32_t                              pcb_type;
 /* I2C related setting */
 	enum   cci_i2c_master_t             cci_i2c_master;
 	enum   cci_device_num               cci_num;

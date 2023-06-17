@@ -10,6 +10,8 @@
 #include "cam_common_util.h"
 #include "camera_main.h"
 
+extern char* get_stage_adc_mb(void);
+
 static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		void *arg, struct cam_flash_private_soc *soc_private)
 {
@@ -142,6 +144,11 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		CAM_DBG(CAM_FLASH, "CAM_QUERY_CAP");
 		flash_cap.slot_info  = fctrl->soc_info.index;
 		flash_cap.flash_type = soc_private->flash_type;
+
+        CAM_DBG(CAM_FLASH, "dts flash_type is %d, it should same with camx&chi flash_type", soc_private->flash_type);
+#ifdef CONFIG_CAMERA_FLASH_PWM
+        CAM_DBG(CAM_FLASH, "get flash_enabel_gpio %d", soc_private->flash_gpio_enable);
+#endif
 		for (i = 0; i < fctrl->flash_num_sources; i++) {
 			flash_cap.max_current_flash[i] =
 				soc_private->flash_max_current[i];
@@ -422,6 +429,7 @@ static int cam_flash_component_bind(struct device *dev,
 	struct device_node *of_parent = NULL;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct cam_hw_soc_info *soc_info = NULL;
+    const char* pcba_stage_name;
 
 	CAM_DBG(CAM_FLASH, "Binding flash component");
 	if (!pdev->dev.of_node) {
@@ -438,6 +446,22 @@ static int cam_flash_component_bind(struct device *dev,
 	fctrl->soc_info.pdev = pdev;
 	fctrl->soc_info.dev = &pdev->dev;
 	fctrl->soc_info.dev_name = pdev->name;
+    pcba_stage_name = get_stage_adc_mb();
+    /* before board v4, pcb_type is 0, otherwise is 1*/
+    if(pcba_stage_name) {
+        CAM_INFO(CAM_FLASH, "pcb stage name is %s", pcba_stage_name);
+        if(strcmp(pcba_stage_name, "EVT0") == 0) {
+            fctrl->pcb_type = 0;
+        }
+        else {
+            fctrl->pcb_type = 1;
+        }
+    }
+    else {
+        fctrl->pcb_type = 1;
+        CAM_ERR(CAM_FLASH, "pcba_stage_name NULL");
+    }
+
 
 	platform_set_drvdata(pdev, fctrl);
 

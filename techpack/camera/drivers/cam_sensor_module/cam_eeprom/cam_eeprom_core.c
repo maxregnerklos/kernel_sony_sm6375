@@ -15,6 +15,133 @@
 #include "cam_packet_util.h"
 
 #define MAX_READ_SIZE  0x7FFFF
+#include <linux/hardware_info.h>
+
+static int cam_eeprom_write_otp_info(struct cam_eeprom_ctrl_t *e_ctrl,
+		struct cam_eeprom_memory_block_t *block)
+{
+	uint32_t  cell_index = 0;
+	uint8_t * data = NULL;
+	struct global_otp_struct hw_info_otp;
+	memset(&hw_info_otp, 0, sizeof(hw_info_otp));
+	cell_index = e_ctrl->soc_info.index;
+	CAM_INFO(CAM_SENSOR,"cell_index:%d",e_ctrl->soc_info.index);
+	data = block->mapdata;
+	if(0 == cell_index){
+		CAM_INFO(CAM_SENSOR,"main otp is valid[%d], vendor id[%d]", data[0],data[1]);
+		if(1 == data[0]){
+			 hw_info_otp.otp_valid = data[0];
+			 hw_info_otp.module_code=data[2];
+			 hw_info_otp.year = data[5];
+			 hw_info_otp.month = data[6];
+			 hw_info_otp.day = data[7];
+			 hw_info_otp.vcm_moduleid = data[13];
+			 hw_info_otp.vcm_vendorid=data[14];
+			 write_cam_otp_info(HWID_MAIN_OTP,&hw_info_otp);
+		}
+	}
+	if(1 == cell_index){
+		CAM_INFO(CAM_SENSOR,"front otp is valid[%d], vendor id[%d]", data[0],data[1]);
+		if(1 == data[0]){
+			 hw_info_otp.otp_valid = data[0];
+			 hw_info_otp.module_code=data[2];
+			 hw_info_otp.year = data[3];
+			 hw_info_otp.month = data[4];
+			 hw_info_otp.day = data[5];
+			 hw_info_otp.vcm_moduleid = data[8];
+			 hw_info_otp.vcm_vendorid=data[9];
+			 write_cam_otp_info(HWID_SUB_OTP,&hw_info_otp);
+		}
+	}
+
+	if(2 == cell_index){
+		CAM_INFO(CAM_SENSOR,"wide otp is valid[%d], vendor id[%d]", data[0],data[1]);
+		if(1 == data[0]){
+			 hw_info_otp.otp_valid = data[0];
+			 hw_info_otp.module_code=data[2];
+			 hw_info_otp.year = data[5];
+			 hw_info_otp.month = data[6];
+			 hw_info_otp.day = data[7];
+			 hw_info_otp.vcm_moduleid = data[13];
+			 hw_info_otp.vcm_vendorid=data[14];
+			 write_cam_otp_info(HWID_MAIN_OTP_2,&hw_info_otp);
+		}
+	}
+
+	if(3 == cell_index){
+		CAM_INFO(CAM_SENSOR,"tele otp is valid[%d], vendor id[%d]", data[0],data[1]);
+		if(1 == data[0]){
+			 hw_info_otp.otp_valid = data[0];
+			 hw_info_otp.module_code=data[2];
+			 hw_info_otp.year = data[5];
+			 hw_info_otp.month = data[6];
+			 hw_info_otp.day = data[7];
+			 hw_info_otp.vcm_moduleid = data[11];
+			 hw_info_otp.vcm_vendorid=data[12];
+			 write_cam_otp_info(HWID_MAIN_OTP_3,&hw_info_otp);
+		}
+	}
+	return 0;
+}
+
+static int cam_eeprom_write_sn_info(struct cam_eeprom_ctrl_t *e_ctrl,
+		struct cam_eeprom_memory_block_t *block)
+{
+	uint32_t  cell_index = 0;
+	uint8_t * data = NULL;
+    char cam_sn[20] = {'\0'};
+    uint8_t offset = 0;
+	cell_index = e_ctrl->soc_info.index;
+	CAM_INFO(CAM_SENSOR,"cell_index:%d",e_ctrl->soc_info.index);
+	data = block->mapdata;
+
+	if(0 == cell_index){
+		if(data[0xBCB]){
+			sprintf(cam_sn, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
+							data[0xBCC],data[0xBCD],data[0xBCE],data[0xBCF],data[0xBD0],data[0xBD1],
+							data[0xBD2],data[0xBD3],data[0xBD4],data[0xBD5],data[0xBD6],data[0xBD7],
+							data[0xBD8],data[0xBD9],data[0xBDA]);
+			get_hardware_info_data(HWID_MAIN_CAM_SN, cam_sn);
+		}
+	}
+	if(1 == cell_index){
+		if(1 == data[5400]){
+			offset = 0;
+		}else if(0x13 == data[5400]){
+			offset = 0x10;
+		}else if(0x37 == data[5400]){
+			offset = 0x20;
+		}
+
+		CAM_INFO(CAM_SENSOR,"front barcode:%d, 1:%d, 2:%d",data[5400], data[5401], data[5402]);
+			sprintf(cam_sn, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
+							data[5401 + offset],data[5402 + offset],data[5403 + offset],data[5404 + offset],data[5405 + offset],data[5406 + offset],
+							data[5407 + offset],data[5408 + offset],data[5409 + offset],data[5410 + offset],data[5411 + offset],data[5412 + offset],
+							data[5413 + offset],data[5414 + offset],data[5415 + offset]);
+			get_hardware_info_data(HWID_SUB_CAM_SN, cam_sn);
+	}
+
+	if(2 == cell_index){
+		if(data[0x710]){
+			sprintf(cam_sn, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
+							data[0x711],data[0x712],data[0x713],data[0x714],data[0x715],data[0x716],
+							data[0x717],data[0x718],data[0x719],data[0x71A],data[0x71B],data[0x71C],
+							data[0x71D],data[0x71E],data[0x71F]);
+			get_hardware_info_data(HWID_MAIN_CAM_2_SN, cam_sn);
+		}
+	}
+
+	if(3 == cell_index){
+		if(data[0x720]){
+			sprintf(cam_sn, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
+							data[0x721],data[0x722],data[0x723],data[0x724],data[0x725],data[0x726],
+							data[0x727],data[0x728],data[0x729],data[0x72A],data[0x72B],data[0x72C],
+							data[0x72D],data[0x72E],data[0x72F]);
+			get_hardware_info_data(HWID_MAIN_CAM_3_SN, cam_sn);
+		}
+	}
+	return 0;
+}
 
 /**
  * cam_eeprom_read_memory() - read map data into buffer
@@ -28,12 +155,13 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 	struct cam_eeprom_memory_block_t *block)
 {
 	int                                rc = 0;
-	int                                j;
+	int                                j, index;
 	struct cam_sensor_i2c_reg_setting  i2c_reg_settings = {0};
 	struct cam_sensor_i2c_reg_array    i2c_reg_array = {0};
 	struct cam_eeprom_memory_map_t    *emap = block->map;
 	struct cam_eeprom_soc_private     *eb_info = NULL;
 	uint8_t                           *memptr = block->mapdata;
+	struct cam_eeprom_soc_private  *soc_private;
 
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "e_ctrl is NULL");
@@ -41,6 +169,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 	}
 
 	eb_info = (struct cam_eeprom_soc_private *)e_ctrl->soc_info.soc_private;
+	soc_private = (struct cam_eeprom_soc_private *)e_ctrl->soc_info.soc_private;
 
 	for (j = 0; j < block->num_map; j++) {
 		CAM_DBG(CAM_EEPROM, "slave-addr = 0x%X", emap[j].saddr);
@@ -104,6 +233,20 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 		}
 
 		if (emap[j].mem.valid_size) {
+			if(soc_private->i2c_info.slave_addr == 0x40){
+                CAM_DBG(CAM_EEPROM, "hi846 otp valid_size is %d", emap[j].mem.valid_size);
+                for(index = 0; index <emap[j].mem.valid_size; index++, memptr++) {
+                    rc = camera_io_dev_read_seq(&e_ctrl->io_master_info,
+                         emap[j].mem.addr, memptr,
+                         emap[j].mem.addr_type,
+                         emap[j].mem.data_type, 1);
+			        if (rc < 0) {
+				        CAM_ERR(CAM_EEPROM, "read failed rc %d",rc);
+				        return rc;
+                    }
+                }
+            }
+            else{
 			rc = camera_io_dev_read_seq(&e_ctrl->io_master_info,
 				emap[j].mem.addr, memptr,
 				emap[j].mem.addr_type,
@@ -113,8 +256,9 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 				CAM_ERR(CAM_EEPROM, "read failed rc %d",
 					rc);
 				return rc;
-			}
-			memptr += emap[j].mem.valid_size;
+				}
+				memptr += emap[j].mem.valid_size;
+		    }
 		}
 
 		if (emap[j].pageen.valid_size) {
@@ -1303,7 +1447,8 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 				"read_eeprom_memory failed");
 			goto power_down;
 		}
-
+		rc = cam_eeprom_write_otp_info(e_ctrl,&e_ctrl->cal_data);
+		rc = cam_eeprom_write_sn_info(e_ctrl,&e_ctrl->cal_data);
 		rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet);
 		rc = cam_eeprom_power_down(e_ctrl);
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
